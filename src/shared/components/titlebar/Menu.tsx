@@ -1,4 +1,3 @@
-import { invoke } from '@tauri-apps/api/core'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { check } from '@tauri-apps/plugin-updater'
 import { useEffect, useState } from 'react'
@@ -17,7 +16,9 @@ import { cn, Dropdown, DropdownItem, DropdownMenu, DropdownTrigger } from '@hero
 import { CustomTooltip, showDangerToast, showPrimaryToast } from '@/shared/components'
 import { useUpdateStore } from '@/shared/stores'
 import {
+  canUseUpdater,
   fetchLatest,
+  invokeSafe,
   isPortableCheck,
   logEvent,
   openExternalLink,
@@ -34,7 +35,7 @@ export const Menu = () => {
     'https://github.com/zevnda/steam-game-idler/issues/new?assignees=zevnda&labels='
 
   useEffect(() => {
-    ;(async () => {
+    ; (async () => {
       const portable = await isPortableCheck()
       setIsPortable(portable)
     })()
@@ -42,10 +43,14 @@ export const Menu = () => {
 
   const handleUpdate = async () => {
     try {
+      if (!canUseUpdater()) {
+        return
+      }
+
       const update = await check()
       if (update) {
         localStorage.setItem('hasUpdated', 'true')
-        await invoke('kill_all_steamutil_processes')
+        await invokeSafe('kill_all_steamutil_processes')
         const latest = await fetchLatest()
         await update.downloadAndInstall()
         if (latest?.major) {

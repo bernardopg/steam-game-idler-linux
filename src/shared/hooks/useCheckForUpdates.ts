@@ -1,11 +1,17 @@
-import { invoke } from '@tauri-apps/api/core'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { check } from '@tauri-apps/plugin-updater'
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { showDangerToast } from '@/shared/components'
 import { useUpdateStore } from '@/shared/stores'
-import { fetchLatest, isPortableCheck, logEvent, preserveKeysAndClearData } from '@/shared/utils'
+import {
+  canUseUpdater,
+  fetchLatest,
+  invokeSafe,
+  isPortableCheck,
+  logEvent,
+  preserveKeysAndClearData,
+} from '@/shared/utils'
 
 export function useCheckForUpdates() {
   const { t } = useTranslation()
@@ -16,6 +22,10 @@ export function useCheckForUpdates() {
     // Check for updates - immediate update for major, or show notification
     const checkForUpdates = async () => {
       try {
+        if (!canUseUpdater()) {
+          return
+        }
+
         const isPortable = await isPortableCheck()
         if (isPortable) return
 
@@ -24,7 +34,7 @@ export function useCheckForUpdates() {
           const latest = await fetchLatest()
           if (latest?.major) {
             localStorage.setItem('hasUpdated', 'true')
-            await invoke('kill_all_steamutil_processes')
+            await invokeSafe('kill_all_steamutil_processes')
             await update.downloadAndInstall()
             await preserveKeysAndClearData()
             await relaunch()

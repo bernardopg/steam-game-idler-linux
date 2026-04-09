@@ -1,4 +1,3 @@
-import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import {
   isPermissionGranted,
@@ -6,22 +5,35 @@ import {
   sendNotification,
 } from '@tauri-apps/plugin-notification'
 import { useUserStore } from '@/shared/stores'
+import { canUseNativeWindowControls, invokeSafe } from '@/shared/utils'
 
 export function useTitlebar() {
   const userSettings = useUserStore(state => state.userSettings)
 
   const windowMinimize = async () => {
+    if (!canUseNativeWindowControls()) {
+      return
+    }
+
     await getCurrentWindow().minimize()
   }
 
   const windowToggleMaximize = async () => {
+    if (!canUseNativeWindowControls()) {
+      return
+    }
+
     await getCurrentWindow().toggleMaximize()
   }
 
   const windowClose = async () => {
     // If the user has not enabled "close to tray", quit the app
+    if (!canUseNativeWindowControls()) {
+      return
+    }
+
     if (!userSettings.general.closeToTray) {
-      await invoke('quit_app')
+      await invokeSafe('quit_app')
       return
     }
 

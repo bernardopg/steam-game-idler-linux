@@ -1,13 +1,17 @@
-import { invoke } from '@tauri-apps/api/core'
 import { Menu, MenuItem } from '@tauri-apps/api/menu'
 import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { useEffect } from 'react'
+import { canUseNativeBridge, invokeSafe } from '@/shared/utils'
 
 export function useContextMenu() {
   // Disable context menu and refresh actions
   useEffect(() => {
     const disableContextMenuAndRefresh = async () => {
-      const isDev = await invoke<boolean>('is_dev')
+      if (!canUseNativeBridge()) {
+        return
+      }
+
+      const isDev = (await invokeSafe<boolean>('is_dev', undefined, false)) ?? false
       if (!isDev) {
         document.addEventListener('contextmenu', event => event.preventDefault())
 
@@ -35,6 +39,10 @@ export function useContextMenu() {
 
   // Create the context menu once on mount
   useEffect(() => {
+    if (!canUseNativeBridge()) {
+      return
+    }
+
     const handleGlobalContextMenu = async (e: MouseEvent) => {
       e.preventDefault()
 

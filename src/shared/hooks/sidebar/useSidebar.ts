@@ -1,10 +1,9 @@
 import type { ActivePageType, CurrentTabType } from '@/shared/types'
-import { invoke } from '@tauri-apps/api/core'
 import { useTranslation } from 'react-i18next'
 import { useDisclosure } from '@heroui/react'
 import { showDangerToast } from '@/shared/components'
 import { useNavigationStore, useSearchStore, useUserStore } from '@/shared/stores'
-import { logEvent } from '@/shared/utils'
+import { invokeSafe, logEvent } from '@/shared/utils'
 
 export function useSidebar(
   activePage: ActivePageType,
@@ -28,7 +27,7 @@ export function useSidebar(
       onClose()
       setUserSummary(null)
       clearLocalStorageData()
-      await invoke('kill_all_steamutil_processes')
+      await invokeSafe('kill_all_steamutil_processes')
       logEvent(`[System] Logged out of ${userSummary?.personaName}`)
     } catch (error) {
       showDangerToast(t('common.error'))

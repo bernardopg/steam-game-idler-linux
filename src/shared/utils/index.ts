@@ -4,6 +4,8 @@ export * from './handleIdle'
 export * from './tasks'
 export * from './handleStartAutoIdleGames'
 export * from './handleCheckForFreeGames'
+export * from './tauri'
+export * from './capabilities'
 
 export { startCardFarming } from './handleStartCardFarming'
 export { startAchievementUnlocker } from './handleStartAchievementUnlocker'

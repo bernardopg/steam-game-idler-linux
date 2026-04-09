@@ -1,4 +1,3 @@
-import { invoke } from '@tauri-apps/api/core'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { check } from '@tauri-apps/plugin-updater'
 import { useState } from 'react'
@@ -6,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { TbCircleArrowDown } from 'react-icons/tb'
 import { Spinner } from '@heroui/react'
 import { CustomTooltip, showDangerToast } from '@/shared/components'
-import { logEvent } from '@/shared/utils'
+import { canUseUpdater, invokeSafe, logEvent } from '@/shared/utils'
 
 export const UpdateButton = () => {
   const { t } = useTranslation()
@@ -14,11 +13,15 @@ export const UpdateButton = () => {
 
   const handleUpdate = async () => {
     try {
+      if (!canUseUpdater()) {
+        return
+      }
+
       setIsLoading(true)
       const update = await check()
       if (update) {
         localStorage.setItem('hasUpdated', 'true')
-        await invoke('kill_all_steamutil_processes')
+        await invokeSafe('kill_all_steamutil_processes')
         await update.downloadAndInstall()
         await relaunch()
       } else {

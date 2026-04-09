@@ -6,15 +6,19 @@ import type {
   UserSettings,
   UserSummary,
 } from '@/shared/types'
-import { getVersion } from '@tauri-apps/api/app'
-import { invoke } from '@tauri-apps/api/core'
 import { TrayIcon } from '@tauri-apps/api/tray'
 import {
   isPermissionGranted,
   requestPermission,
   sendNotification,
 } from '@tauri-apps/plugin-notification'
-import { openUrl } from '@tauri-apps/plugin-opener'
+import {
+  canOpenExternalLinks,
+  canUseNativeBridge,
+  canUseNotifications,
+  getRuntimeCapabilities,
+} from './capabilities'
+import { getVersionSafe, invokeSafe } from './tauri'
 import i18next from 'i18next'
 import { fetchUserSummary } from '@/features/settings'
 import {
@@ -26,7 +30,8 @@ import {
 
 export async function checkSteamStatus(showToast: boolean) {
   try {
-    const isSteamRunning = await invoke<boolean>('is_steam_running')
+    const isSteamRunning =
+      (await invokeSafe<boolean>('is_steam_running', undefined, false)) ?? false
     if (!isSteamRunning && showToast) showSteamNotRunningToast()
     return isSteamRunning
   } catch (error) {
@@ -55,14 +60,16 @@ export async function fetchLatest() {
 let antiAwayInterval: ReturnType<typeof setTimeout> | null = null
 export async function antiAwayStatus(active: boolean | null = null) {
   try {
-    const steamRunning = await invoke('is_steam_running')
+    const steamRunning = (await invokeSafe<boolean>('is_steam_running', undefined, false)) ?? false
     if (!steamRunning) return
 
     const userSummary = JSON.parse(localStorage.getItem('userSummary') || '{}') as UserSummary
 
-    const response = await invoke<InvokeSettings>('get_user_settings', {
+    const response = await invokeSafe<InvokeSettings>('get_user_settings', {
       steamId: userSummary?.steamId,
     })
+
+    if (!response) return
 
     const settings = response.settings
 
@@ -71,11 +78,11 @@ export async function antiAwayStatus(active: boolean | null = null) {
     const shouldRun = active !== null ? active : antiAway
 
     if (shouldRun) {
-      await invoke('anti_away')
+      await invokeSafe('anti_away')
       if (!antiAwayInterval) {
         antiAwayInterval = setInterval(
           async () => {
-            await invoke('anti_away')
+            await invokeSafe('anti_away')
           },
           3 * 60 * 1000,
         )
@@ -97,7 +104,11 @@ export async function autoRevalidateSteamCredentials(
   setUserSettings: (value: UserSettings) => void,
 ) {
   try {
-    const result = await invoke<InvokeSteamCredentials>('open_steam_login_window')
+    const result = await invokeSafe<InvokeSteamCredentials>('open_steam_login_window')
+
+    if (!result) {
+      return
+    }
 
     if (!result || result.success === false) {
       showDangerToast(i18next.t('common.error'))
@@ -112,17 +123,25 @@ export async function autoRevalidateSteamCredentials(
     ) {
       const userSummary = JSON.parse(localStorage.getItem('userSummary') || '{}') as UserSummary
 
-      const cachedUserSettings = await invoke<InvokeSettings>('get_user_settings', {
+      const cachedUserSettings = await invokeSafe<InvokeSettings>('get_user_settings', {
         steamId: userSummary?.steamId,
       })
 
+      if (!cachedUserSettings) {
+        return
+      }
+
       // Verify steam cookies are valid
-      const validate = await invoke<InvokeValidateSession>('validate_session', {
+      const validate = await invokeSafe<InvokeValidateSession>('validate_session', {
         sid: result.sessionid,
         sls: result.steamLoginSecure,
         sma: result.steamMachineAuth || result.steamParental || undefined,
         steamid: userSummary?.steamId,
       })
+
+      if (!validate) {
+        return
+      }
 
       if (validate.user) {
         const steamId = result.steamLoginSecure.slice(0, 17)
@@ -138,7 +157,7 @@ export async function autoRevalidateSteamCredentials(
         }
 
         // Save valid cookies and update UI state
-        await invoke<InvokeSettings>('update_user_settings', {
+        await invokeSafe<InvokeSettings>('update_user_settings', {
           steamId: userSummary?.steamId,
           key: 'cardFarming.credentials',
           value: {
@@ -149,11 +168,15 @@ export async function autoRevalidateSteamCredentials(
         })
 
         // Save card farming user and update UI state
-        const updatedUserSettings = await invoke<InvokeSettings>('update_user_settings', {
+        const updatedUserSettings = await invokeSafe<InvokeSettings>('update_user_settings', {
           steamId: userSummary?.steamId,
           key: 'cardFarming.userSummary',
           value: cardFarmingUser,
         })
+
+        if (!updatedUserSettings) {
+          return
+        }
 
         setUserSettings(updatedUserSettings.settings)
 
@@ -199,7 +222,7 @@ export const preserveKeysAndClearData = async () => {
     localStorage.clear()
     sessionStorage.clear()
 
-    await invoke('delete_all_cache_files')
+    await invokeSafe('delete_all_cache_files')
 
     Object.entries(preservedData).forEach(([key, value]) => {
       localStorage.setItem(key, value)
@@ -214,8 +237,8 @@ export const preserveKeysAndClearData = async () => {
 // Get the app version
 export const getAppVersion = async () => {
   try {
-    const appVersion = await getVersion()
-    return appVersion
+    const appVersion = await getVersionSafe()
+    return appVersion || ''
   } catch (error) {
     showDangerToast(i18next.t('common.error'))
     console.error('Error in (getAppVersion):', error)
@@ -226,8 +249,10 @@ export const getAppVersion = async () => {
 // Log event
 export async function logEvent(message: string) {
   try {
-    const version = await getVersion()
-    await invoke('log_event', { message: `[v${version}] ${message}` })
+    const version = await getVersionSafe()
+    if (!version) return
+
+    await invokeSafe('log_event', { message: `[v${version}] ${message}` })
   } catch (error) {
     console.error('Error in logEvent util: ', error)
   }
@@ -266,6 +291,10 @@ export function decrypt(string: string) {
 
 export async function updateTrayIcon(tooltip?: string, runningStatus?: boolean) {
   try {
+    if (!canUseNativeBridge()) {
+      return
+    }
+
     const trayIcon = await TrayIcon.getById('1')
     if (trayIcon) {
       if (tooltip) {
@@ -276,11 +305,13 @@ export async function updateTrayIcon(tooltip?: string, runningStatus?: boolean) 
 
       if (runningStatus) {
         // Get icon as base64 from backend
-        const base64Icon = await invoke<string>('get_tray_icon', { default: false })
+        const base64Icon = await invokeSafe<string>('get_tray_icon', { default: false })
+        if (!base64Icon) return
         const iconBuffer = Uint8Array.from(atob(base64Icon), c => c.charCodeAt(0))
         await trayIcon.setIcon(iconBuffer)
       } else {
-        const base64Icon = await invoke<string>('get_tray_icon', { default: true })
+        const base64Icon = await invokeSafe<string>('get_tray_icon', { default: true })
+        if (!base64Icon) return
         const iconBuffer = Uint8Array.from(atob(base64Icon), c => c.charCodeAt(0))
         await trayIcon.setIcon(iconBuffer)
       }
@@ -293,8 +324,12 @@ export async function updateTrayIcon(tooltip?: string, runningStatus?: boolean) 
 
 export async function isPortableCheck() {
   try {
-    const portable = await invoke<boolean>('is_portable')
-    return portable
+    if (!canUseNativeBridge()) {
+      return true
+    }
+
+    const portable = await invokeSafe<boolean>('is_portable', undefined, true)
+    return portable ?? true
   } catch (error) {
     console.error('Error in isPortable:', error)
     logEvent(`[Error] in isPortable: ${error}`)
@@ -305,6 +340,10 @@ export async function isPortableCheck() {
 // Send a native notification
 export async function sendNativeNotification(title: string, body: string) {
   try {
+    if (!canUseNotifications()) {
+      return
+    }
+
     let permissionGranted = await isPermissionGranted()
 
     // Request permission if not granted
@@ -325,8 +364,16 @@ export async function sendNativeNotification(title: string, body: string) {
 
 export async function openExternalLink(href: string) {
   try {
+    if (!canOpenExternalLinks() && typeof window !== 'undefined') {
+      window.open(href, '_blank', 'noopener,noreferrer')
+      return
+    }
+
+    const { openUrl } = await import('@tauri-apps/plugin-opener')
     await openUrl(href)
   } catch (error) {
     console.error('Failed to open link:', error)
   }
 }
+
+export { getRuntimeCapabilities }

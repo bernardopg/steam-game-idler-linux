@@ -1,8 +1,7 @@
 import type { Game, InvokeRunningProcess } from '@/shared/types'
-import { invoke } from '@tauri-apps/api/core'
-import { listen } from '@tauri-apps/api/event'
 import { useEffect } from 'react'
 import { useIdleStore, useStateStore, useUserStore } from '@/shared/stores'
+import { canUseNativeBridge, invokeSafe, listenSafe } from '@/shared/utils'
 
 export function useSteamMonitor() {
   const userSummary = useUserStore(state => state.userSummary)
@@ -13,10 +12,14 @@ export function useSteamMonitor() {
 
   // Listen for Steam status changes
   useEffect(() => {
-    const unlistenPromise = listen<boolean>('steam_status_changed', event => {
+    if (!canUseNativeBridge()) {
+      return
+    }
+
+    const unlistenPromise = listenSafe<boolean>('steam_status_changed', event => {
       const isSteamRunning = event.payload
       if (!isSteamRunning && userSummary) {
-        invoke('kill_all_steamutil_processes')
+        void invokeSafe('kill_all_steamutil_processes')
         setIsCardFarming(false)
         setIsAchievementUnlocker(false)
         setShowSteamWarning(true)
@@ -24,13 +27,17 @@ export function useSteamMonitor() {
     })
 
     return () => {
-      unlistenPromise.then(unlisten => unlisten())
+      unlistenPromise?.then(unlisten => unlisten?.())
     }
   }, [userSummary, setIsAchievementUnlocker, setIsCardFarming, setShowSteamWarning])
 
   // Listen for running processes changes
   useEffect(() => {
-    const unlistenPromise = listen('running_processes_changed', event => {
+    if (!canUseNativeBridge()) {
+      return
+    }
+
+    const unlistenPromise = listenSafe('running_processes_changed', event => {
       const response = event.payload as InvokeRunningProcess
       const processes = response?.processes
 
@@ -62,7 +69,7 @@ export function useSteamMonitor() {
     })
 
     return () => {
-      unlistenPromise.then(unlisten => unlisten())
+      unlistenPromise?.then(unlisten => unlisten?.())
     }
   }, [setIdleGamesList])
 }

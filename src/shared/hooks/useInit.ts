@@ -1,10 +1,9 @@
 import type { UserSummary } from '@/shared/types'
-import { invoke } from '@tauri-apps/api/core'
-import { emit } from '@tauri-apps/api/event'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLoaderStore, useStateStore, useUserStore } from '@/shared/stores'
+import { canUseNativeBridge, emitSafe, invokeSafe } from '@/shared/utils'
 
 export function useInit() {
   const setLoadingUserSummary = useStateStore(state => state.setLoadingUserSummary)
@@ -16,15 +15,15 @@ export function useInit() {
 
   useEffect(() => {
     // Emit ready event to backend
-    emit('ready')
+    void emitSafe('ready')
     // Start the Steam status monitor once globally
-    invoke('start_steam_status_monitor')
+    void invokeSafe('start_steam_status_monitor')
     // Start the processes monitor once globally
-    invoke('start_processes_monitor')
+    void invokeSafe('start_processes_monitor')
   }, [])
 
   useEffect(() => {
-    invoke('update_tray_menu', {
+    void invokeSafe('update_tray_menu', {
       show: t('tray.show'),
       update: t('tray.update'),
       quit: t('tray.quit'),
@@ -50,6 +49,10 @@ export function useInit() {
   useEffect(() => {
     const closeWebview = async () => {
       try {
+        if (!canUseNativeBridge()) {
+          return
+        }
+
         const webview = await WebviewWindow.getByLabel('webview')
         setTimeout(async () => {
           await webview?.close()

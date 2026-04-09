@@ -1,10 +1,9 @@
 import type { Game, InvokeGamesList, SortStyleValue } from '@/shared/types'
-import { invoke } from '@tauri-apps/api/core'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { showDangerToast } from '@/shared/components'
 import { useSearchStore, useUserStore } from '@/shared/stores'
-import { decrypt, logEvent } from '@/shared/utils'
+import { canUseNativeBridge, decrypt, invokeSafe, logEvent } from '@/shared/utils'
 
 export function useGamesList() {
   const { t } = useTranslation()
@@ -29,6 +28,16 @@ export function useGamesList() {
   useEffect(() => {
     const getGamesList = async () => {
       try {
+        if (!canUseNativeBridge()) {
+          setIsLoading(false)
+          setGamesList([])
+          setRecentGames([])
+          setUnplayedGames([])
+          setFilteredGames([])
+          setVisibleGames([])
+          return
+        }
+
         setIsLoading(true)
         const sortStyle = localStorage.getItem('sortStyle')
         if (sortStyle) setSortStyle(sortStyle)
@@ -119,7 +128,13 @@ export const fetchGamesList = async (
 ) => {
   if (!steamId) return { gamesList: [], recentGamesList: [] }
   // Try to get games from cache first
-  const cachedGamesListFiles = await invoke<InvokeGamesList>('get_games_list_cache', { steamId })
+  const cachedGamesListFiles = await invokeSafe<InvokeGamesList>('get_games_list_cache', {
+    steamId,
+  })
+
+  if (!cachedGamesListFiles) {
+    return { gamesList: [], recentGamesList: [] }
+  }
 
   const hasCachedGamesList = cachedGamesListFiles && cachedGamesListFiles.games_list.length > 0
 
@@ -134,15 +149,19 @@ export const fetchGamesList = async (
     }
   } else {
     // Fallback to API if cache isn't available or user requested refresh
-    const gamesListResponse = await invoke<InvokeGamesList>('get_games_list', {
+    const gamesListResponse = await invokeSafe<InvokeGamesList>('get_games_list', {
       steamId,
       apiKey: apiKey ? decrypt(apiKey) : null,
     })
 
-    const recentGamesListResponse = await invoke<InvokeGamesList>('get_recent_games', {
+    const recentGamesListResponse = await invokeSafe<InvokeGamesList>('get_recent_games', {
       steamId,
       apiKey: apiKey ? decrypt(apiKey) : null,
     })
+
+    if (!gamesListResponse || !recentGamesListResponse) {
+      return { gamesList: [], recentGamesList: [] }
+    }
 
     const gamesList = gamesListResponse.games_list
     const recentGamesList = recentGamesListResponse.games_list

@@ -1,10 +1,9 @@
 import type { InvokeUsers, InvokeUserSummary, UserSummary } from '@/shared/types'
-import { invoke } from '@tauri-apps/api/core'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { showAccountMismatchToast, showDangerToast } from '@/shared/components'
 import { useUserStore } from '@/shared/stores'
-import { checkSteamStatus, decrypt, logEvent } from '@/shared/utils'
+import { canUseNativeBridge, checkSteamStatus, decrypt, invokeSafe, logEvent } from '@/shared/utils'
 
 export function useSignIn(refreshKey: number) {
   const { t } = useTranslation()
@@ -41,13 +40,20 @@ export function useSignIn(refreshKey: number) {
     const getSteamUsers = async () => {
       setIsLoading(true)
 
+      if (!canUseNativeBridge()) {
+        setSteamUsers([])
+        setUserSummaries([])
+        setIsLoading(false)
+        return
+      }
+
       // Simulate loading time for better UX
       // await new Promise(resolve => setTimeout(resolve, 1000))
 
       try {
-        const response = await invoke<InvokeUsers>('get_users')
+        const response = await invokeSafe<InvokeUsers>('get_users')
 
-        if (response.users && response.users.length > 0) {
+        if (response?.users && response.users.length > 0) {
           const apiKey = userSettings.general?.apiKey
           const validUsers = response.users.filter(user => user?.steamId)
 
@@ -60,7 +66,8 @@ export function useSignIn(refreshKey: number) {
 
           try {
             // Check for cached user summaries first
-            const cachedUserSummaries = await invoke<InvokeUserSummary[]>('get_user_summary_cache')
+            const cachedUserSummaries =
+              (await invokeSafe<InvokeUserSummary[]>('get_user_summary_cache')) || []
 
             const steamUsers: UserSummary[] = []
             const uncachedUsers: UserSummary[] = []
@@ -90,10 +97,14 @@ export function useSignIn(refreshKey: number) {
             // If there are uncached users, make API call for them
             if (uncachedUsers.length > 0) {
               const steamIds = uncachedUsers.map(user => String(user?.steamId)).join(',')
-              const userSummaryResponse = await invoke<InvokeUserSummary>('get_user_summary', {
+              const userSummaryResponse = await invokeSafe<InvokeUserSummary>('get_user_summary', {
                 steamId: steamIds,
                 apiKey: apiKey ? decrypt(apiKey) : null,
               })
+
+              if (!userSummaryResponse) {
+                throw new Error('Missing user summary response')
+              }
 
               const freshUsers = processUserSummaries(userSummaryResponse, uncachedUsers)
               steamUsers.push(...freshUsers)
@@ -142,7 +153,7 @@ export function useSignIn(refreshKey: number) {
       const isSteamRunning = await checkSteamStatus(true)
 
       const devAccounts = ['76561198158912649', '76561198999797359']
-      const isDev = await invoke('is_dev')
+      const isDev = (await invokeSafe<boolean>('is_dev', undefined, false)) ?? false
 
       if (!isSteamRunning && !isDev && !devAccounts.includes(userSummaries[index]?.steamId ?? ''))
         return

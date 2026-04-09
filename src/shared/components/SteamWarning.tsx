@@ -1,10 +1,9 @@
-import { invoke } from '@tauri-apps/api/core'
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button, useDisclosure } from '@heroui/react'
 import { CustomModal } from '@/shared/components'
 import { useStateStore, useUserStore } from '@/shared/stores'
-import { checkSteamStatus } from '@/shared/utils'
+import { checkSteamStatus, invokeSafe } from '@/shared/utils'
 
 export const SteamWarning = () => {
   const { t } = useTranslation()
@@ -16,7 +15,7 @@ export const SteamWarning = () => {
   useEffect(() => {
     const shouldShowWarning = async () => {
       const devAccounts = ['76561198158912649', '76561198999797359']
-      const isDev = await invoke('is_dev')
+      const isDev = (await invokeSafe<boolean>('is_dev', undefined, false)) ?? false
 
       const isUserDev = devAccounts.includes(userSummary?.steamId ?? '')
 

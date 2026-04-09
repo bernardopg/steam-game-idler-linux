@@ -1,4 +1,3 @@
-import { getVersion } from '@tauri-apps/api/app'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { RiCustomerService2Line } from 'react-icons/ri'
@@ -7,7 +6,7 @@ import { Button, cn } from '@heroui/react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { CustomTooltip } from '@/shared/components'
 import { useUserStore } from '@/shared/stores'
-import { isPortableCheck } from '@/shared/utils'
+import { getVersionSafe, isPortableCheck } from '@/shared/utils'
 
 declare global {
   interface Window {
@@ -99,7 +98,7 @@ export const HelpDesk = () => {
 
   useEffect(() => {
     const setUserData = async () => {
-      const version = await getVersion()
+      const version = await getVersionSafe()
       const isPortable = await isPortableCheck()
 
       if (userSummary && typeof window !== 'undefined' && window.$chatway) {
@@ -115,7 +114,7 @@ export const HelpDesk = () => {
   const handleToggle = async () => {
     if (!isLoaded || typeof window === 'undefined' || !window.$chatway) return
 
-    const version = await getVersion()
+    const version = await getVersionSafe()
     const isPortable = await isPortableCheck()
 
     const widget = document.querySelector('.chatway--container')

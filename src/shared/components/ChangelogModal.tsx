@@ -9,11 +9,10 @@ import {
   useDisclosure,
 } from '@heroui/react'
 import 'github-markdown-css/github-markdown-light.css'
-import { getVersion } from '@tauri-apps/api/app'
 import { useTranslation } from 'react-i18next'
 import { FaStar } from 'react-icons/fa6'
 import { useUpdateStore } from '@/shared/stores'
-import { openExternalLink } from '@/shared/utils'
+import { getVersionSafe, openExternalLink } from '@/shared/utils'
 
 export const ChangelogModal = () => {
   const { t } = useTranslation()
@@ -31,10 +30,10 @@ export const ChangelogModal = () => {
   }, [onOpen, showChangelog, setShowChangelog, isVersionLoaded])
 
   useEffect(() => {
-    ;(async () => {
+    ; (async () => {
       try {
-        const version = await getVersion()
-        setAppVersion(version)
+        const version = await getVersionSafe()
+        setAppVersion(version || 'latest')
         setIsVersionLoaded(true)
       } catch (error) {
         console.error('Failed to get app version:', error)
