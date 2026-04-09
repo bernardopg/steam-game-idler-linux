@@ -1,11 +1,14 @@
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+#[cfg(windows)]
 pub mod achievement_manager;
 pub mod automation;
 pub mod crypto;
 pub mod custom_lists;
 pub mod game_data;
+#[cfg(windows)]
 pub mod idling;
 pub mod logging;
+#[cfg(windows)]
 pub mod process_handler;
 pub mod settings;
 pub mod trading_cards;
@@ -23,7 +26,117 @@ use trading_cards::*;
 use user_data::*;
 use utils::*;
 
-use std::env;
+#[cfg(not(windows))]
+pub mod achievement_manager {
+    use serde_json::Value;
+
+    #[tauri::command]
+    pub async fn get_achievement_data(
+        _steam_id: String,
+        _app_id: u32,
+        _refetch: Option<bool>,
+        _app_handle: tauri::AppHandle,
+    ) -> Result<Value, String> {
+        Err("Achievement management is only available on Windows".to_string())
+    }
+
+    #[tauri::command]
+    pub async fn unlock_achievement(_app_id: u32, _achievement_id: &str) -> Result<String, String> {
+        Err("Achievement management is only available on Windows".to_string())
+    }
+
+    #[tauri::command]
+    pub async fn lock_achievement(_app_id: u32, _achievement_id: &str) -> Result<String, String> {
+        Err("Achievement management is only available on Windows".to_string())
+    }
+
+    #[tauri::command]
+    pub async fn toggle_achievement(_app_id: u32, _achievement_id: &str) -> Result<String, String> {
+        Err("Achievement management is only available on Windows".to_string())
+    }
+
+    #[tauri::command]
+    pub async fn unlock_all_achievements(_app_id: u32) -> Result<String, String> {
+        Err("Achievement management is only available on Windows".to_string())
+    }
+
+    #[tauri::command]
+    pub async fn lock_all_achievements(_app_id: u32) -> Result<String, String> {
+        Err("Achievement management is only available on Windows".to_string())
+    }
+
+    #[tauri::command]
+    pub async fn update_stats(_app_id: u32, _stats_arr: &str) -> Result<String, String> {
+        Err("Achievement management is only available on Windows".to_string())
+    }
+
+    #[tauri::command]
+    pub async fn reset_all_stats(_app_id: u32) -> Result<String, String> {
+        Err("Achievement management is only available on Windows".to_string())
+    }
+}
+
+#[cfg(not(windows))]
+pub mod idling {
+    use serde_json::Value;
+
+    #[derive(Debug)]
+    pub struct ProcessInfo;
+
+    #[tauri::command]
+    pub async fn start_idle(_app_id: u32, _app_name: String) -> Result<Value, String> {
+        Err("Game idling is only available on Windows".to_string())
+    }
+
+    #[tauri::command]
+    pub async fn stop_idle(_app_id: u32) -> Result<Value, String> {
+        Err("Game idling is only available on Windows".to_string())
+    }
+
+    #[derive(serde::Deserialize)]
+    pub struct GameInfo {
+        pub app_id: u32,
+        pub name: String,
+    }
+
+    #[tauri::command]
+    pub async fn start_farm_idle(_games_list: Vec<GameInfo>) -> Result<Value, String> {
+        Err("Game idling is only available on Windows".to_string())
+    }
+
+    #[tauri::command]
+    pub async fn stop_farm_idle() -> Result<Value, String> {
+        Err("Game idling is only available on Windows".to_string())
+    }
+}
+
+#[cfg(not(windows))]
+pub mod process_handler {
+    use serde_json::Value;
+
+    #[tauri::command]
+    pub async fn get_running_processes() -> Result<Value, String> {
+        Err("Process management is only available on Windows".to_string())
+    }
+
+    #[tauri::command]
+    pub async fn kill_process_by_pid(_pid: u32) -> Result<Value, String> {
+        Err("Process management is only available on Windows".to_string())
+    }
+
+    #[tauri::command]
+    pub async fn kill_all_steamutil_processes() -> Result<Value, String> {
+        Err("Process management is only available on Windows".to_string())
+    }
+
+    pub fn cleanup_dead_processes() -> Result<(), String> {
+        Ok(())
+    }
+
+    #[tauri::command]
+    pub async fn start_processes_monitor(_app_handle: tauri::AppHandle) {}
+}
+
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -40,7 +153,7 @@ pub fn run() {
                 std::env::set_var("KEY", key);
             },
             _ => {
-                dotenv::from_filename(".env.dev").unwrap().load();
+                let _ = dotenv::from_filename(".env.dev").unwrap().load();
             }
         }
     } else {

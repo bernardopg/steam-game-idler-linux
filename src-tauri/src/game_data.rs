@@ -8,8 +8,6 @@ use std::fs::File;
 use std::fs::{create_dir_all, remove_dir_all, remove_file, OpenOptions};
 use std::io::Read;
 use std::io::Write;
-use std::os::windows::process::CommandExt;
-use tauri::Manager;
 
 #[derive(Serialize, Deserialize)]
 struct GameInfo {
@@ -39,9 +37,13 @@ pub async fn get_games_list(
 
     // Create an empty temp file to write to
     let exe_path = get_lib_path()?;
-    let output = std::process::Command::new(exe_path)
-        .args(&["check_ownership", &temp_games_file_str])
-        .creation_flags(0x08000000)
+    let mut command = std::process::Command::new(exe_path);
+    command.args(&["check_ownership", &temp_games_file_str]);
+    #[cfg(windows)]
+    {
+        let _ = command.creation_flags(0x08000000);
+    }
+    let output = command
         .output()
         .map_err(|e| format!("Failed to execute check_ownership: {}", e))?;
 
@@ -357,6 +359,16 @@ pub async fn get_free_games() -> Result<serde_json::Value, String> {
 }
 
 // Redeem a free game by opening the Steam store page and clicking the "Add to Library" button if available
+#[cfg(not(windows))]
+#[tauri::command]
+pub async fn redeem_free_game(
+    _app_handle: tauri::AppHandle,
+    _app_id: String,
+) -> Result<Value, String> {
+    Err("Redeeming free games is only available on Windows".to_string())
+}
+
+#[cfg(windows)]
 #[tauri::command]
 pub async fn redeem_free_game(
     app_handle: tauri::AppHandle,
@@ -389,51 +401,51 @@ pub async fn redeem_free_game(
             let js_check = r#"
                 (function() {
                     console.log('=== Debug: Starting button search ===');
-                    
+
                     // Check for btn_addtocart div
                     const cartDiv = document.querySelector('.btn_addtocart');
                     console.log('btn_addtocart div found:', !!cartDiv);
                     if (cartDiv) {
                         console.log('btn_addtocart HTML:', cartDiv.innerHTML);
                     }
-                    
+
                     // Try different selectors
                     const btn1 = document.querySelector('.btn_addtocart a');
                     console.log('Selector ".btn_addtocart a" found:', !!btn1);
-                    
+
                     const btn2 = document.querySelector('.btn_addtocart a.btn_green_steamui');
                     console.log('Selector ".btn_addtocart a.btn_green_steamui" found:', !!btn2);
-                    
+
                     const btn3 = document.querySelector('a.btn_green_steamui[href*="addToCart"]');
                     console.log('Selector "a.btn_green_steamui[href*="addToCart"]" found:', !!btn3);
-                    
+
                     const btn4 = document.querySelector('.btn_addtocart a[href*="addToCart"]');
                     console.log('Selector ".btn_addtocart a[href*="addToCart"]" found:', !!btn4);
-                    
+
                     // Use the most specific selector
                     const btn = document.querySelector('.btn_addtocart a[href*="addToCart"]');
                     if (!btn) {
                         console.error('Button not found with any selector');
                         throw new Error('Button not found');
                     }
-                    
+
                     console.log('Found button:', btn);
                     const href = btn.getAttribute('href');
                     console.log('Button href:', href);
-                    
+
                     const match = href.match(/addToCart\(\s*(\d+)\s*\)/);
                     if (!match) {
                         console.error('No match for product ID in href:', href);
                         throw new Error('No match for product ID');
                     }
-                    
+
                     const productId = match[1];
                     console.log('Found product ID:', productId);
-                    
+
                     // Call the addToCart function
                     console.log('Calling addToCart with product ID:', productId);
                     addToCart(productId);
-                    
+
                     return true;
                 })();
             "#;

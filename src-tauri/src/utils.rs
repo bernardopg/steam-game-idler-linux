@@ -4,7 +4,6 @@ use regex::Regex;
 use reqwest::Client;
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use std::os::windows::process::CommandExt;
 use std::sync::Mutex;
 use std::time::Duration;
 use steamlocate::SteamDir;
@@ -112,27 +111,37 @@ pub async fn validate_steam_api_key(
     }
 }
 
+#[cfg(not(windows))]
 #[tauri::command]
 pub async fn anti_away() -> Result<(), String> {
-    // Execute a command to set Steam status to online
-    std::process::Command::new("cmd")
-        .args(&["/C", "start steam://friends/status/online"])
-        .creation_flags(0x08000000)
-        .spawn()
-        .map_err(|e| e.to_string())?;
+    Err("Anti-away is only available on Windows".to_string())
+}
+
+#[cfg(windows)]
+#[tauri::command]
+pub async fn anti_away() -> Result<(), String> {
+    let mut command = std::process::Command::new("cmd");
+    command.args(&["/C", "start steam://friends/status/online"]);
+    let _ = command.creation_flags(0x08000000);
+    command.spawn().map_err(|e| e.to_string())?;
     Ok(())
 }
 
+#[cfg(not(windows))]
+#[tauri::command]
+pub fn open_file_explorer(_path: String, _app_handle: tauri::AppHandle) -> Result<(), String> {
+    Err("File explorer integration is only available on Windows".to_string())
+}
+
+#[cfg(windows)]
 #[tauri::command]
 pub fn open_file_explorer(path: String, app_handle: tauri::AppHandle) -> Result<(), String> {
     let cache_dir = get_cache_dir(&app_handle)?;
 
-    // Open the file explorer and select the specified path
-    std::process::Command::new("explorer")
-        .args(["/select,", cache_dir.join(path).to_str().unwrap()])
-        .creation_flags(0x08000000)
-        .spawn()
-        .map_err(|e| e.to_string())?;
+    let mut command = std::process::Command::new("explorer");
+    command.args(["/select,", cache_dir.join(path).to_str().unwrap()]);
+    let _ = command.creation_flags(0x08000000);
+    command.spawn().map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -209,11 +218,17 @@ pub fn quit_app(app_handle: tauri::AppHandle) {
 }
 
 // Command to set the zoom level of the webview
+#[cfg(not(windows))]
+#[tauri::command]
+pub fn set_zoom(_webview: tauri::Webview, _scale_factor: f64) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(windows)]
 #[tauri::command]
 pub fn set_zoom(webview: tauri::Webview, scale_factor: f64) -> Result<(), String> {
     webview
         .with_webview(move |webview| {
-            #[cfg(windows)]
             unsafe {
                 if let Err(e) = webview.controller().SetZoomFactor(scale_factor) {
                     eprintln!("Failed to set zoom factor: {}", e);
@@ -242,6 +257,13 @@ pub async fn start_steam_status_monitor(app_handle: tauri::AppHandle) {
 }
 
 // Open a Steam login window, allow user to log in, and retrieve session cookies automatically
+#[cfg(not(windows))]
+#[tauri::command]
+pub async fn open_steam_login_window(_app_handle: tauri::AppHandle) -> Result<Value, String> {
+    Err("Steam login window is only available on Windows".to_string())
+}
+
+#[cfg(windows)]
 #[tauri::command]
 pub async fn open_steam_login_window(app_handle: tauri::AppHandle) -> Result<Value, String> {
     use std::time::Duration;
@@ -367,6 +389,13 @@ pub async fn open_steam_login_window(app_handle: tauri::AppHandle) -> Result<Val
 }
 
 // Delete Steam login window cookies to sign out the user
+#[cfg(not(windows))]
+#[tauri::command]
+pub async fn delete_login_window_cookies(_app_handle: tauri::AppHandle) -> Result<Value, String> {
+    Err("Steam login window is only available on Windows".to_string())
+}
+
+#[cfg(windows)]
 #[tauri::command]
 pub async fn delete_login_window_cookies(app_handle: tauri::AppHandle) -> Result<Value, String> {
     // Create a hidden window
@@ -431,6 +460,13 @@ pub async fn delete_login_window_cookies(app_handle: tauri::AppHandle) -> Result
 }
 
 // Open a Steam store login window and retrieve session cookies automatically
+#[cfg(not(windows))]
+#[tauri::command]
+pub async fn open_store_login_window(_app_handle: tauri::AppHandle) -> Result<Value, String> {
+    Err("Steam store login window is only available on Windows".to_string())
+}
+
+#[cfg(windows)]
 #[tauri::command]
 pub async fn open_store_login_window(app_handle: tauri::AppHandle) -> Result<Value, String> {
     use std::time::Duration;
